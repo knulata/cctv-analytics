@@ -81,6 +81,10 @@
                 <div class="stat-label">Total Analyses</div>
                 <div class="stat-val" id="s-total">—</div>
             </div>
+            <div class="stat">
+                <div class="stat-label">Est. Monthly Cost</div>
+                <div class="stat-val green" id="s-cost">—</div>
+            </div>
         </div>
 
         <div class="grid-2">
@@ -185,7 +189,10 @@ let chart;
 
 async function loadStats() {
     try {
-        const r = await fetch('/api/analytics/summary');
+        const [r, cr] = await Promise.all([
+            fetch('/api/analytics/summary'),
+            fetch('/api/analytics/cost'),
+        ]);
         const s = await r.json();
         document.getElementById('s-cameras').textContent = s.total_cameras;
         const ae = document.getElementById('s-alerts');
@@ -198,6 +205,10 @@ async function loadStats() {
         te.textContent = s.avg_theft_risk || '—';
         te.className = 'stat-val ' + statColor(s.avg_theft_risk || 0, true);
         document.getElementById('s-total').textContent = s.total_analyses;
+        const cost = await cr.json();
+        document.getElementById('s-cost').textContent = cost.estimated_monthly_30day > 0
+            ? '$' + cost.estimated_monthly_30day.toFixed(2)
+            : '$0';
     } catch(e) {}
 }
 
@@ -323,7 +334,12 @@ async function uploadFile(file) {
                 </div>
                 <div style="font-size:13px;color:var(--text);margin-bottom:12px"><strong>Summary:</strong> ${data.summary}</div>
                 ${data.fraud_indicators?.length ? `<div style="font-size:12px;color:var(--warning);margin-bottom:8px"><strong>Fraud indicators:</strong> ${data.fraud_indicators.join(', ')}</div>` : ''}
-                ${data.staff_behavior ? `<div style="font-size:12px;color:var(--text-muted)"><strong>Staff:</strong> ${Object.entries(data.staff_behavior).map(([k,v]) => k + ': ' + v).join(' · ')}</div>` : ''}
+                ${data.staff_behavior ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px"><strong>Staff:</strong> ${Object.entries(data.staff_behavior).map(([k,v]) => k + ': ' + v).join(' · ')}</div>` : ''}
+                <div style="font-size:11px;color:var(--text-dim);display:flex;gap:12px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+                    <span>Model: ${data.model_used || 'gpt-4o-mini'}</span>
+                    ${data.escalated ? '<span class="badge badge-high">Escalated to GPT-4o</span>' : '<span style="color:var(--success)">Low-cost analysis</span>'}
+                    <span>~$${data.escalated ? '0.022' : '0.001'}</span>
+                </div>
             </div>`;
     } catch(e) { resEl.innerHTML = `<div class="modal-error" style="display:block;margin-top:16px">Error: ${e}</div>`; }
 }
