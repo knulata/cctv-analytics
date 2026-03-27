@@ -1,0 +1,12 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index" }
+  ],
+  "crons": [
+    { "path": "/api/index?cron=analyze", "schedule": "*/5 * * * *" }
+  ],
+  "env": {
+    "PYTHONPATH": "api"
+  }
+}

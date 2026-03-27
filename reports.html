@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports — CCTV Analytics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <h1><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> CCTV Analytics</h1>
+            <p>Security & Service Monitor</p>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg> Dashboard</a>
+            <a href="/cameras" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Cameras</a>
+            <a href="/alerts" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerts <span class="nav-badge" id="alert-badge" style="display:none">0</span></a>
+            <a href="/reports" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg> Reports</a>
+        </nav>
+        <div class="sidebar-footer"><div class="wa-status"><span class="wa-dot off" id="wa-dot"></span><span id="wa-label">WA: Checking...</span></div></div>
+    </aside>
+
+    <div class="content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Reports</h1>
+                <p class="page-subtitle">Historical analysis data and trends</p>
+            </div>
+        </div>
+
+        <div class="filters">
+            <select class="form-select" id="r-cam" onchange="loadAll()">
+                <option value="">All Cameras</option>
+            </select>
+            <select class="form-select" id="r-type" onchange="loadAll()">
+                <option value="">All Types</option>
+                <option value="retail">Retail</option>
+                <option value="wholesale">Wholesale</option>
+                <option value="restaurant">Restaurant</option>
+            </select>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid-2" style="margin-bottom:24px">
+            <div class="card">
+                <div class="card-header"><span class="card-title">Customer Service Scores</span></div>
+                <div class="card-body"><div class="chart-wrap" style="height:240px"><canvas id="svc-chart"></canvas></div></div>
+            </div>
+            <div class="card">
+                <div class="card-header"><span class="card-title">Theft Risk Scores</span></div>
+                <div class="card-body"><div class="chart-wrap" style="height:240px"><canvas id="theft-chart"></canvas></div></div>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+            <div class="card-header"><span class="card-title">Recent Analyses</span></div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Camera</th>
+                            <th>Type</th>
+                            <th>Service</th>
+                            <th>Theft</th>
+                            <th>Alert</th>
+                            <th>People</th>
+                            <th>Summary</th>
+                        </tr>
+                    </thead>
+                    <tbody id="r-tbody">
+                        <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim)">No data yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<nav class="mobile-nav">
+    <a href="/"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg> Dashboard</a>
+    <a href="/cameras"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Cameras</a>
+    <a href="/alerts"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg> Alerts</a>
+    <a href="/reports" class="active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg> Reports</a>
+</nav>
+
+<script src="/js/app.js"></script>
+<script>
+let svcChart, theftChart;
+
+async function loadCamOpts() {
+    const r = await fetch('/api/cameras');
+    const cams = await r.json();
+    const sel = document.getElementById('r-cam');
+    cams.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o); });
+}
+
+async function loadAll() {
+    const camId = document.getElementById('r-cam').value;
+    const btype = document.getElementById('r-type').value;
+    const params = new URLSearchParams({ limit: 200 });
+    if (camId) params.set('camera_id', camId);
+    if (btype) params.set('business_type', btype);
+
+    const [scoresR, recentR] = await Promise.all([
+        fetch('/api/analytics/scores?' + params),
+        fetch('/api/analytics/recent?' + new URLSearchParams(camId ? { camera_id: camId, limit: 50 } : { limit: 50 }))
+    ]);
+    const scores = await scoresR.json();
+    const recent = await recentR.json();
+    renderCharts(scores);
+    renderTable(recent);
+}
+
+function renderCharts(data) {
+    const labels = data.map(d => new Date(d.analyzed_at).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
+    const opts = {
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { min: 0, max: 10, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B' } }, x: { grid: { display: false }, ticks: { color: '#64748B', maxTicksLimit: 8 } } },
+        plugins: { legend: { display: false } },
+        elements: { point: { radius: 2 }, line: { tension: 0.3 } }
+    };
+
+    if (svcChart) svcChart.destroy();
+    svcChart = new Chart(document.getElementById('svc-chart'), {
+        type: 'line', data: { labels, datasets: [{ data: data.map(d => d.customer_service_score), borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true }] }, options: opts
+    });
+    if (theftChart) theftChart.destroy();
+    theftChart = new Chart(document.getElementById('theft-chart'), {
+        type: 'line', data: { labels, datasets: [{ data: data.map(d => d.theft_risk_score), borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.08)', fill: true }] }, options: opts
+    });
+}
+
+function renderTable(data) {
+    const tb = document.getElementById('r-tbody');
+    if (!data.length) { tb.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim)">No data</td></tr>'; return; }
+    tb.innerHTML = data.map(r => `
+        <tr>
+            <td style="white-space:nowrap;font-size:12px">${new Date(r.analyzed_at).toLocaleString()}</td>
+            <td>${r.camera_name}</td>
+            <td><span class="badge badge-${r.business_type}">${r.business_type}</span></td>
+            <td style="text-align:center"><span class="score ${scoreClass(r.customer_service_score)}" style="font-size:16px">${r.customer_service_score}</span></td>
+            <td style="text-align:center"><span class="score ${scoreClass(r.theft_risk_score, true)}" style="font-size:16px">${r.theft_risk_score}</span></td>
+            <td style="text-align:center"><span class="badge badge-${r.alert_level || 'low'}">${r.alert_level || 'none'}</span></td>
+            <td style="text-align:center">${r.people_count}</td>
+            <td style="font-size:12px;color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.summary || '—'}</td>
+        </tr>
+    `).join('');
+}
+
+loadCamOpts();
+loadAll();
+</script>
+</body>
+</html>

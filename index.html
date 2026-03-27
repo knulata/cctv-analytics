@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — CCTV Analytics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <h1>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                CCTV Analytics
+            </h1>
+            <p>Security & Service Monitor</p>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/" class="nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                Dashboard
+            </a>
+            <a href="/cameras" class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                Cameras
+            </a>
+            <a href="/alerts" class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Alerts
+                <span class="nav-badge" id="alert-badge" style="display:none">0</span>
+            </a>
+            <a href="/reports" class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                Reports
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="wa-status">
+                <span class="wa-dot off" id="wa-dot"></span>
+                <span id="wa-label">WA: Checking...</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Dashboard</h1>
+                <p class="page-subtitle">Real-time security & service overview</p>
+            </div>
+            <a href="/cameras" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Camera
+            </a>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="stats">
+            <div class="stat">
+                <div class="stat-label">Active Cameras</div>
+                <div class="stat-val" id="s-cameras">—</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Unread Alerts</div>
+                <div class="stat-val" id="s-alerts">—</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Avg Service Score</div>
+                <div class="stat-val" id="s-service">—</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Avg Theft Risk</div>
+                <div class="stat-val" id="s-theft">—</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Total Analyses</div>
+                <div class="stat-val" id="s-total">—</div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <!-- Camera Feeds -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Camera Feeds</span>
+                    <a href="/cameras" class="btn btn-ghost btn-sm">Manage</a>
+                </div>
+                <div class="card-body" id="cam-feeds">
+                    <div class="empty">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                        <h3>No cameras yet</h3>
+                        <p>Add your first camera to start monitoring</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alerts -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Recent Alerts</span>
+                    <a href="/alerts" class="btn btn-ghost btn-sm">View All</a>
+                </div>
+                <div id="alert-feed">
+                    <div class="card-body">
+                        <div class="empty">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            <h3>All clear</h3>
+                            <p>No issues detected</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="card" style="margin-top:24px">
+            <div class="card-header">
+                <span class="card-title">Score Trends</span>
+                <div style="display:flex;gap:8px">
+                    <select class="form-select" id="chart-type" style="width:auto;min-width:120px;padding:6px 10px;font-size:12px">
+                        <option value="">All Types</option>
+                        <option value="retail">Retail</option>
+                        <option value="wholesale">Wholesale</option>
+                        <option value="restaurant">Restaurant</option>
+                    </select>
+                    <select class="form-select" id="chart-days" style="width:auto;min-width:80px;padding:6px 10px;font-size:12px">
+                        <option value="50">24h</option>
+                        <option value="200" selected>7 days</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap">
+                    <canvas id="score-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Upload -->
+        <div class="card" style="margin-top:24px">
+            <div class="card-header">
+                <span class="card-title">Quick Analysis</span>
+            </div>
+            <div class="card-body">
+                <div class="upload-zone" id="upload-zone">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <p>Drop a CCTV screenshot here or click to upload</p>
+                    <div class="hint">Supports JPG, PNG — analyzed instantly with AI</div>
+                    <input type="file" id="upload-input" accept="image/*" style="display:none">
+                </div>
+                <div id="upload-result"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mobile nav -->
+<nav class="mobile-nav">
+    <a href="/" class="active">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        Dashboard
+    </a>
+    <a href="/cameras">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Cameras
+    </a>
+    <a href="/alerts">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+        Alerts
+    </a>
+    <a href="/reports">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+        Reports
+    </a>
+</nav>
+
+<script src="/js/app.js"></script>
+<script>
+let chart;
+
+async function loadStats() {
+    try {
+        const r = await fetch('/api/analytics/summary');
+        const s = await r.json();
+        document.getElementById('s-cameras').textContent = s.total_cameras;
+        const ae = document.getElementById('s-alerts');
+        ae.textContent = s.total_alerts;
+        ae.className = 'stat-val ' + (s.critical_alerts > 0 ? 'red' : s.total_alerts > 0 ? 'yellow' : '');
+        const se = document.getElementById('s-service');
+        se.textContent = s.avg_service_score || '—';
+        se.className = 'stat-val ' + statColor(s.avg_service_score || 0);
+        const te = document.getElementById('s-theft');
+        te.textContent = s.avg_theft_risk || '—';
+        te.className = 'stat-val ' + statColor(s.avg_theft_risk || 0, true);
+        document.getElementById('s-total').textContent = s.total_analyses;
+    } catch(e) {}
+}
+
+async function loadCameras() {
+    try {
+        const r = await fetch('/api/cameras?active=true');
+        const cams = await r.json();
+        const el = document.getElementById('cam-feeds');
+        if (!cams.length) return;
+        el.innerHTML = cams.map(c => `
+            <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">
+                <div style="width:10px;height:10px;border-radius:50%;background:${c.last_seen ? 'var(--success)' : 'var(--text-dim)'};flex-shrink:0" ${c.last_seen ? 'class="pulse"' : ''}></div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:600;font-size:13px;color:var(--text-heading)">${c.name}</div>
+                    <div style="font-size:11px;color:var(--text-dim)">${c.location || 'No location'} · ${c.last_seen ? timeAgo(c.last_seen) : 'Never seen'}</div>
+                </div>
+                <span class="badge badge-${c.business_type}">${c.business_type}</span>
+                <button class="btn btn-ghost btn-sm" onclick="analyzeCamera('${c.id}', this)">Analyze</button>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+
+async function analyzeCamera(id, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    try {
+        const r = await fetch('/api/analyze/camera/' + id, { method: 'POST' });
+        const data = await r.json();
+        if (data.error) { alert(data.error); return; }
+        loadStats();
+        loadAlerts();
+        btn.textContent = data.customer_service_score + '/10';
+    } catch(e) { alert('Error: ' + e); }
+    finally { btn.disabled = false; }
+}
+
+async function loadAlerts() {
+    try {
+        const r = await fetch('/api/alerts?limit=8&unread=true');
+        const alerts = await r.json();
+        const el = document.getElementById('alert-feed');
+        if (!alerts.length) return;
+        el.innerHTML = '<div class="alert-list">' + alerts.map(a => `
+            <div class="alert-item unread" onclick="fetch('/api/alerts/${a.id}/read',{method:'PUT'})">
+                <div class="alert-dot ${a.severity}"></div>
+                <div class="alert-body">
+                    <div class="alert-title">${a.title}</div>
+                    <div class="alert-desc">${a.description || ''}</div>
+                    <div class="alert-meta">
+                        <span class="badge badge-${a.severity}">${a.severity}</span>
+                        <span>${a.camera_name}</span>
+                        <span>${timeAgo(a.created_at)}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('') + '</div>';
+    } catch(e) {}
+}
+
+async function loadChart() {
+    const btype = document.getElementById('chart-type').value;
+    const limit = document.getElementById('chart-days').value;
+    const params = new URLSearchParams({ limit });
+    if (btype) params.set('business_type', btype);
+    try {
+        const r = await fetch('/api/analytics/scores?' + params);
+        const data = await r.json();
+        const labels = data.map(d => new Date(d.analyzed_at).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
+        if (chart) chart.destroy();
+        chart = new Chart(document.getElementById('score-chart'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Service Score', data: data.map(d => d.customer_service_score), borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, tension: 0.3 },
+                    { label: 'Theft Risk', data: data.map(d => d.theft_risk_score), borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.08)', fill: true, tension: 0.3 },
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { min: 0, max: 10, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748B' } },
+                    x: { grid: { display: false }, ticks: { color: '#64748B', maxTicksLimit: 10 } }
+                },
+                plugins: { legend: { labels: { color: '#94A3B8', usePointStyle: true, padding: 16 } } },
+                elements: { point: { radius: 2, hoverRadius: 5 } }
+            }
+        });
+    } catch(e) {}
+}
+
+// Upload
+const zone = document.getElementById('upload-zone');
+const input = document.getElementById('upload-input');
+zone.addEventListener('click', () => input.click());
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+input.addEventListener('change', e => { if (e.target.files.length) uploadFile(e.target.files[0]); });
+
+async function uploadFile(file) {
+    const resEl = document.getElementById('upload-result');
+    resEl.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:16px;color:var(--text-muted)"><span class="spinner"></span> Analyzing with AI...</div>';
+    const form = new FormData();
+    form.append('image', file);
+    form.append('business_type', 'retail');
+    try {
+        const r = await fetch('/api/analyze', { method: 'POST', body: form });
+        const data = await r.json();
+        if (data.error) { resEl.innerHTML = `<div class="modal-error" style="display:block;margin-top:16px">${data.error}</div>`; return; }
+        resEl.innerHTML = `
+            <div class="result-card">
+                <div class="result-grid">
+                    <div class="result-item"><label>Service Score</label><span class="score ${scoreClass(data.customer_service_score)}">${data.customer_service_score}/10</span></div>
+                    <div class="result-item"><label>Theft Risk</label><span class="score ${scoreClass(data.theft_risk_score, true)}">${data.theft_risk_score}/10</span></div>
+                    <div class="result-item"><label>Alert Level</label><span class="badge badge-${data.alert_level || 'low'}">${data.alert_level}</span></div>
+                    <div class="result-item"><label>People</label><span style="font-size:20px;font-weight:700;color:var(--text-heading)">${data.people_count}</span></div>
+                </div>
+                <div style="font-size:13px;color:var(--text);margin-bottom:12px"><strong>Summary:</strong> ${data.summary}</div>
+                ${data.fraud_indicators?.length ? `<div style="font-size:12px;color:var(--warning);margin-bottom:8px"><strong>Fraud indicators:</strong> ${data.fraud_indicators.join(', ')}</div>` : ''}
+                ${data.staff_behavior ? `<div style="font-size:12px;color:var(--text-muted)"><strong>Staff:</strong> ${Object.entries(data.staff_behavior).map(([k,v]) => k + ': ' + v).join(' · ')}</div>` : ''}
+            </div>`;
+    } catch(e) { resEl.innerHTML = `<div class="modal-error" style="display:block;margin-top:16px">Error: ${e}</div>`; }
+}
+
+document.getElementById('chart-type').addEventListener('change', loadChart);
+document.getElementById('chart-days').addEventListener('change', loadChart);
+
+loadStats(); loadCameras(); loadAlerts(); loadChart();
+setInterval(() => { loadStats(); loadAlerts(); }, 15000);
+</script>
+</body>
+</html>
