@@ -3,25 +3,40 @@ import os
 import json
 import time
 import uuid
-from upstash_redis import Redis
 
 _redis = None
+_redis_available = True
 
 
 def get_redis():
-    global _redis
+    global _redis, _redis_available
+    if not _redis_available:
+        return None
     if _redis is None:
-        _redis = Redis(
-            url=os.environ.get("UPSTASH_REDIS_REST_URL", ""),
-            token=os.environ.get("UPSTASH_REDIS_REST_TOKEN", ""),
-        )
+        url = os.environ.get("UPSTASH_REDIS_REST_URL", "")
+        token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
+        if not url or not token:
+            _redis_available = False
+            return None
+        try:
+            from upstash_redis import Redis
+            _redis = Redis(url=url, token=token)
+        except Exception:
+            _redis_available = False
+            return None
     return _redis
+
+
+def is_configured():
+    return get_redis() is not None
 
 
 # --- Cameras ---
 
 def get_cameras(active_only=False):
     r = get_redis()
+    if not r:
+        return []
     keys = r.smembers("cameras")
     cameras = []
     for key in keys:
@@ -37,6 +52,8 @@ def get_cameras(active_only=False):
 
 def get_camera(camera_id):
     r = get_redis()
+    if not r:
+        return None
     data = r.hgetall(f"camera:{camera_id}")
     if not data:
         return None
@@ -46,6 +63,8 @@ def get_camera(camera_id):
 
 def add_camera(name, snapshot_url, business_type, location="", whatsapp_alert=True):
     r = get_redis()
+    if not r:
+        return None
     camera_id = str(uuid.uuid4())[:8]
     data = {
         "name": name,
@@ -64,6 +83,8 @@ def add_camera(name, snapshot_url, business_type, location="", whatsapp_alert=Tr
 
 def update_camera(camera_id, **kwargs):
     r = get_redis()
+    if not r:
+        return
     updates = {k: str(v) for k, v in kwargs.items()}
     r.hset(f"camera:{camera_id}", values=updates)
 
@@ -90,6 +111,8 @@ def _parse_camera(data):
 
 def add_analysis(camera_id, result, image_url=""):
     r = get_redis()
+    if not r:
+        return None
     analysis_id = str(uuid.uuid4())[:8]
     data = {
         "camera_id": camera_id,
@@ -108,13 +131,14 @@ def add_analysis(camera_id, result, image_url=""):
     r.lpush("analyses:all", analysis_id)
     r.ltrim("analyses:all", 0, 999)
     r.ltrim(f"analyses:camera:{camera_id}", 0, 499)
-    # Update camera last_seen
     update_camera(camera_id, last_seen=data["analyzed_at"])
     return analysis_id
 
 
 def get_recent_analyses(camera_id=None, limit=50):
     r = get_redis()
+    if not r:
+        return []
     if camera_id:
         ids = r.lrange(f"analyses:camera:{camera_id}", 0, limit - 1)
     else:
@@ -139,6 +163,8 @@ def get_recent_analyses(camera_id=None, limit=50):
 
 def get_score_trends(camera_id=None, business_type=None, limit=200):
     r = get_redis()
+    if not r:
+        return []
     if camera_id:
         ids = r.lrange(f"analyses:camera:{camera_id}", 0, limit - 1)
     else:
@@ -167,6 +193,8 @@ def get_score_trends(camera_id=None, business_type=None, limit=200):
 
 def add_alert(analysis_id, camera_id, severity, category, title, description="", image_url=""):
     r = get_redis()
+    if not r:
+        return None
     alert_id = str(uuid.uuid4())[:8]
     data = {
         "analysis_id": analysis_id,
@@ -188,6 +216,8 @@ def add_alert(analysis_id, camera_id, severity, category, title, description="",
 
 def get_alerts(severity=None, camera_id=None, category=None, unread_only=False, limit=100):
     r = get_redis()
+    if not r:
+        return []
     if camera_id:
         ids = r.lrange(f"alerts:camera:{camera_id}", 0, limit - 1)
     else:
@@ -217,12 +247,15 @@ def get_alerts(severity=None, camera_id=None, category=None, unread_only=False, 
 
 def mark_alert_read(alert_id):
     r = get_redis()
+    if not r:
+        return
     r.hset(f"alert:{alert_id}", "is_read", "1")
 
 
 def is_duplicate_alert(camera_id, category, window_seconds=300):
-    """Check if a similar alert was raised recently."""
     r = get_redis()
+    if not r:
+        return False
     ids = r.lrange(f"alerts:camera:{camera_id}", 0, 9)
     now = time.time()
     for aid in ids:
@@ -243,10 +276,16 @@ def is_duplicate_alert(camera_id, category, window_seconds=300):
 
 def get_dashboard_stats():
     r = get_redis()
+    if not r:
+        return {
+            "total_cameras": 0, "total_alerts": 0, "critical_alerts": 0,
+            "avg_service_score": 0, "avg_theft_risk": 0, "total_analyses": 0,
+            "db_configured": False,
+        }
+
     cameras = get_cameras(active_only=True)
     total_cameras = len(cameras)
 
-    # Count unread alerts
     alert_ids = r.lrange("alerts:all", 0, 99)
     unread = 0
     critical = 0
@@ -257,7 +296,6 @@ def get_dashboard_stats():
             if data.get("severity") == "critical":
                 critical += 1
 
-    # Average scores from recent analyses
     analysis_ids = r.lrange("analyses:all", 0, 49)
     service_scores = []
     theft_scores = []
@@ -277,4 +315,5 @@ def get_dashboard_stats():
         "avg_service_score": round(sum(service_scores) / len(service_scores), 1) if service_scores else 0,
         "avg_theft_risk": round(sum(theft_scores) / len(theft_scores), 1) if theft_scores else 0,
         "total_analyses": len(analysis_ids),
+        "db_configured": True,
     }

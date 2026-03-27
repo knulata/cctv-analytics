@@ -241,7 +241,7 @@ def whatsapp_test():
 
 @app.before_request
 def handle_cron_param():
-    if request.args.get("cron") == "analyze" and request.path == "/api/index":
+    if request.args.get("cron") == "analyze" and request.path in ("/api/index", "/api/app"):
         return cron_analyze()
 
 
