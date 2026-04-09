@@ -18,20 +18,44 @@ def _get_client():
     return OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
 
 
-def build_prompt(business_type, deep=False):
+ZONE_FOCUS = {
+    "checkout": "the CHECKOUT/CASHIER area. Pay extreme attention to: items not being scanned (sweethearting), cash handling discrepancies, voids/refunds without customers, employees giving free items to friends, customer concealment at the bag area.",
+    "aisle": "a STORE AISLE. Pay attention to: customers concealing items in bags/clothing, tag removal, opening packaging, lingering near high-value items, sleight-of-hand behavior, group distraction tactics.",
+    "storeroom": "a STOREROOM/STOCK area. This area should usually be empty or staff-only. Watch for: unauthorized access, items being removed in personal bags, employees lingering without purpose, hidden corners being used.",
+    "entrance": "the ENTRANCE/EXIT. Watch for: people leaving with items not in bags from this store, tailgating, suspicious loitering, people running out, returning customers (could be theft return scams).",
+    "parking": "the PARKING area. Watch for: vehicles loading suspicious items, people transferring goods between vehicles, surveillance of customers, abandoned items.",
+    "warehouse": "a WAREHOUSE/LOADING area. Watch for: pallets/boxes leaving without paperwork, unauthorized vehicles, stock count discrepancies, employees moving inventory in unusual patterns.",
+    "dining": "a RESTAURANT DINING area. Watch for: customers leaving without paying (dine-and-dash), staff giving free food/drinks, plate sharing without ordering, table attentiveness.",
+    "kitchen": "a KITCHEN/PREP area. Watch for: ingredient theft, employees eating inventory, sanitation issues, unauthorized personnel.",
+    "general": "a general retail area. Apply standard loss prevention and customer service observation.",
+}
+
+
+def build_prompt(business_type, deep=False, zone_type="general", after_hours=False):
     context = {
         "retail": "a retail store. Watch for shoplifting, concealment of merchandise, tag removal, bag stuffing, distraction theft, employee collusion, and sweethearting (not scanning items at checkout). For customer service, evaluate staff greeting customers, attentiveness, product knowledge assistance, and checkout efficiency.",
         "wholesale": "a wholesale/warehouse operation. Watch for inventory theft, unauthorized access to restricted areas, loading dock theft, falsified counts, employee pilferage, and unauthorized removal of goods. For customer service, evaluate order processing speed, staff helpfulness, and professional handling of bulk orders.",
         "restaurant": "a restaurant. Watch for cash register theft, free food given to friends, ingredient theft, dine-and-dash behavior, and unauthorized discounts. For customer service, evaluate greeting speed, table attentiveness, order accuracy behavior, cleanliness, and staff professionalism.",
     }
 
+    zone_focus = ZONE_FOCUS.get(zone_type, ZONE_FOCUS["general"])
+
     deep_instruction = """
 IMPORTANT: This frame was flagged as suspicious by initial screening. Analyze carefully and in detail.
 Look closely at hand positions, body language, item handling, and any concealment behavior.
 """ if deep else ""
 
+    after_hours_instruction = """
+⚠️ AFTER-HOURS MODE: This camera is monitoring during closed/non-business hours.
+ANY person, motion, or unusual activity must be flagged as critical.
+The expected state is EMPTY. Even employees in the area outside their normal shift is suspicious.
+If you see ANY people, set theft_risk_score >= 8 and alert_level = "critical".
+""" if after_hours else ""
+
     return f"""You are a CCTV security and operations analyst for {context.get(business_type, context['retail'])}
-{deep_instruction}
+
+ZONE FOCUS: This camera is positioned at {zone_focus}
+{deep_instruction}{after_hours_instruction}
 Analyze this camera frame and provide a JSON assessment. Be specific about what you observe.
 
 Respond ONLY with valid JSON in this exact structure:
@@ -102,23 +126,21 @@ def has_scene_changed_redis(camera_id, b64_image):
 
 # ─── Tiered analysis ───────────────────────────────────────
 
-def analyze_image_url(image_url, business_type):
+def analyze_image_url(image_url, business_type, zone_type="general", after_hours=False):
     """Analyze an image from a URL — uses tiered model strategy."""
     client = _get_client()
     try:
-        # Tier 1: GPT-4o-mini (fast, cheap)
-        result = _call_vision(client, "gpt-4o-mini", image_url, business_type, is_url=True)
-
-        # Tier 2: Escalate to GPT-4o if suspicious
-        if _should_escalate(result):
-            deep_result = _call_vision(client, "gpt-4o", image_url, business_type, is_url=True, deep=True)
+        result = _call_vision(client, "gpt-4o-mini", image_url, business_type, is_url=True,
+                              zone_type=zone_type, after_hours=after_hours)
+        if _should_escalate(result, after_hours):
+            deep_result = _call_vision(client, "gpt-4o", image_url, business_type, is_url=True,
+                                       deep=True, zone_type=zone_type, after_hours=after_hours)
             deep_result["escalated"] = True
             deep_result["mini_scores"] = {
                 "theft_risk": result.get("theft_risk_score", 0),
                 "service": result.get("customer_service_score", 0),
             }
             return deep_result
-
         result["escalated"] = False
         result["model_used"] = "gpt-4o-mini"
         return result
@@ -126,23 +148,21 @@ def analyze_image_url(image_url, business_type):
         return _error_result(str(e))
 
 
-def analyze_image_base64(b64_image, business_type):
+def analyze_image_base64(b64_image, business_type, zone_type="general", after_hours=False):
     """Analyze a base64-encoded image — uses tiered model strategy."""
     client = _get_client()
     try:
-        # Tier 1: GPT-4o-mini
-        result = _call_vision(client, "gpt-4o-mini", b64_image, business_type, is_url=False)
-
-        # Tier 2: Escalate to GPT-4o if suspicious
-        if _should_escalate(result):
-            deep_result = _call_vision(client, "gpt-4o", b64_image, business_type, is_url=False, deep=True)
+        result = _call_vision(client, "gpt-4o-mini", b64_image, business_type, is_url=False,
+                              zone_type=zone_type, after_hours=after_hours)
+        if _should_escalate(result, after_hours):
+            deep_result = _call_vision(client, "gpt-4o", b64_image, business_type, is_url=False,
+                                       deep=True, zone_type=zone_type, after_hours=after_hours)
             deep_result["escalated"] = True
             deep_result["mini_scores"] = {
                 "theft_risk": result.get("theft_risk_score", 0),
                 "service": result.get("customer_service_score", 0),
             }
             return deep_result
-
         result["escalated"] = False
         result["model_used"] = "gpt-4o-mini"
         return result
@@ -150,11 +170,15 @@ def analyze_image_base64(b64_image, business_type):
         return _error_result(str(e))
 
 
-def _should_escalate(result):
+def _should_escalate(result, after_hours=False):
     """Determine if a mini result warrants deep analysis with GPT-4o."""
     theft = result.get("theft_risk_score", 0)
     alert = result.get("alert_level", "none")
     fraud = len(result.get("fraud_indicators", []))
+    people = result.get("people_count", 0)
+    # After hours: any people detected escalates immediately
+    if after_hours and people > 0:
+        return True
     return (
         theft >= ESCALATION_THRESHOLD
         or alert in ("high", "critical")
@@ -162,7 +186,8 @@ def _should_escalate(result):
     )
 
 
-def _call_vision(client, model, image_data, business_type, is_url=False, deep=False):
+def _call_vision(client, model, image_data, business_type, is_url=False, deep=False,
+                 zone_type="general", after_hours=False):
     """Call OpenAI Vision API with specified model."""
     if is_url:
         image_content = {"type": "image_url", "image_url": {"url": image_data, "detail": "low" if model == "gpt-4o-mini" else "high"}}
@@ -173,7 +198,7 @@ def _call_vision(client, model, image_data, business_type, is_url=False, deep=Fa
     response = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": build_prompt(business_type, deep=deep)},
+            {"role": "system", "content": build_prompt(business_type, deep=deep, zone_type=zone_type, after_hours=after_hours)},
             {
                 "role": "user",
                 "content": [
@@ -191,6 +216,31 @@ def _call_vision(client, model, image_data, business_type, is_url=False, deep=Fa
 
 
 # ─── Utilities ──────────────────────────────────────────────
+
+def is_in_business_hours(camera):
+    """Check if camera is currently within configured business hours."""
+    from datetime import datetime, timezone, timedelta
+    open_str = camera.get("hours_open", "09:00")
+    close_str = camera.get("hours_close", "22:00")
+    # 24/7 mode
+    if open_str == close_str == "00:00":
+        return True
+    try:
+        # Jakarta time (WIB UTC+7)
+        jakarta = datetime.now(timezone.utc) + timedelta(hours=7)
+        now_minutes = jakarta.hour * 60 + jakarta.minute
+        oh, om = map(int, open_str.split(":"))
+        ch, cm = map(int, close_str.split(":"))
+        open_min = oh * 60 + om
+        close_min = ch * 60 + cm
+        if open_min < close_min:
+            return open_min <= now_minutes <= close_min
+        else:
+            # crosses midnight (e.g. 22:00-06:00)
+            return now_minutes >= open_min or now_minutes <= close_min
+    except (ValueError, AttributeError):
+        return True
+
 
 def fetch_snapshot(url):
     """Fetch a snapshot image from a camera URL, return base64."""

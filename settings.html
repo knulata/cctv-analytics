@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings — CCTV Analytics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <h1><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> CCTV Analytics</h1>
+            <p>Security & Service Monitor</p>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg> Dashboard</a>
+            <a href="/cameras" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Cameras</a>
+            <a href="/alerts" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerts <span class="nav-badge" id="alert-badge" style="display:none">0</span></a>
+            <a href="/reports" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg> Reports</a>
+            <a href="/settings" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</a>
+        </nav>
+        <div class="sidebar-footer"><div class="wa-status"><span class="wa-dot off" id="wa-dot"></span><span id="wa-label">WA: Checking...</span></div></div>
+    </aside>
+
+    <div class="content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Settings</h1>
+                <p class="page-subtitle">WhatsApp recipients and notification config</p>
+            </div>
+        </div>
+
+        <!-- WhatsApp Recipients -->
+        <div class="card" style="margin-bottom:24px">
+            <div class="card-header">
+                <span class="card-title">WhatsApp Recipients</span>
+                <button class="btn btn-primary btn-sm" onclick="openAddRecipient()">+ Add Recipient</button>
+            </div>
+            <div id="recipients-list">
+                <div class="card-body">
+                    <div class="empty">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51z"/></svg>
+                        <h3>No recipients</h3>
+                        <p>Add a WhatsApp number to receive alerts and digests</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Digest -->
+        <div class="card" style="margin-bottom:24px">
+            <div class="card-header">
+                <span class="card-title">Daily Digest Preview</span>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-ghost btn-sm" onclick="loadDigestPreview()">Refresh</button>
+                    <button class="btn btn-primary btn-sm" onclick="sendDigestNow()">Send Now</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">Auto-sent daily at 8am Jakarta</div>
+                <pre id="digest-preview" style="background:var(--bg);padding:16px;border-radius:8px;font-family:var(--font);font-size:13px;color:var(--text);white-space:pre-wrap;border:1px solid var(--border);max-height:400px;overflow-y:auto">Loading...</pre>
+            </div>
+        </div>
+
+        <!-- WhatsApp Test -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Test Connection</span>
+            </div>
+            <div class="card-body">
+                <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">Send a test message to all configured recipients</p>
+                <button class="btn btn-primary" onclick="sendTest()">Send Test Alert</button>
+                <div id="test-result" style="margin-top:12px;font-size:13px"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add recipient modal -->
+<div class="modal-overlay" id="rec-modal">
+    <div class="modal">
+        <div class="modal-title">Add WhatsApp Recipient</div>
+        <div class="form-group">
+            <label class="form-label">Name</label>
+            <input class="form-input" id="rec-name" placeholder="e.g. Pak Budi (Manager)">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Phone Number</label>
+            <input class="form-input" id="rec-phone" placeholder="628131102445">
+            <div class="form-hint">Indonesian format with country code, no +. Example: 628131102445</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Role</label>
+            <select class="form-select" id="rec-role">
+                <option value="manager">Manager</option>
+                <option value="owner">Owner</option>
+                <option value="security">Security</option>
+                <option value="staff">Staff</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
+                <input type="checkbox" id="rec-alerts" checked>
+                <span>Receive real-time alerts</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="rec-digest" checked>
+                <span>Receive morning digest (8am daily)</span>
+            </label>
+        </div>
+        <div class="modal-error" id="rec-error"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeRecModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitRecipient()">Add</button>
+        </div>
+    </div>
+</div>
+
+<nav class="mobile-nav">
+    <a href="/"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg> Dashboard</a>
+    <a href="/cameras"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Cameras</a>
+    <a href="/alerts"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg> Alerts</a>
+    <a href="/settings" class="active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg> Settings</a>
+</nav>
+
+<script src="/js/app.js"></script>
+<script>
+const recModal = document.getElementById('rec-modal');
+function openAddRecipient() { recModal.classList.add('open'); }
+function closeRecModal() { recModal.classList.remove('open'); }
+recModal.addEventListener('click', e => { if (e.target === recModal) closeRecModal(); });
+
+async function loadRecipients() {
+    const r = await fetch('/api/recipients');
+    const list = await r.json();
+    const el = document.getElementById('recipients-list');
+    if (!list.length) {
+        el.innerHTML = '<div class="card-body"><div class="empty"><h3>No recipients</h3><p>Add a WhatsApp number to receive alerts</p></div></div>';
+        return;
+    }
+    el.innerHTML = '<div>' + list.map(r => `
+        <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border)">
+            <div style="width:40px;height:40px;border-radius:50%;background:var(--accent-glow);display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:700">${r.name[0].toUpperCase()}</div>
+            <div style="flex:1">
+                <div style="font-weight:600;color:var(--text-heading)">${r.name}</div>
+                <div style="font-size:12px;color:var(--text-muted)">${r.phone} · ${r.role}</div>
+                <div style="display:flex;gap:6px;margin-top:4px">
+                    ${r.alerts ? '<span class="badge badge-active">Alerts</span>' : ''}
+                    ${r.digest ? '<span class="badge badge-low">Digest</span>' : ''}
+                </div>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="removeRec('${r.id}')">Remove</button>
+        </div>
+    `).join('') + '</div>';
+}
+
+async function submitRecipient() {
+    const err = document.getElementById('rec-error');
+    const data = {
+        name: document.getElementById('rec-name').value.trim(),
+        phone: document.getElementById('rec-phone').value.trim().replace(/[\s+\-]/g, ''),
+        role: document.getElementById('rec-role').value,
+        alerts: document.getElementById('rec-alerts').checked,
+        digest: document.getElementById('rec-digest').checked,
+    };
+    if (!data.name || !data.phone) { err.textContent = 'Name and phone required'; err.style.display = 'block'; return; }
+    const r = await fetch('/api/recipients', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    const res = await r.json();
+    if (!r.ok) { err.textContent = res.error; err.style.display = 'block'; return; }
+    closeRecModal();
+    document.getElementById('rec-name').value = '';
+    document.getElementById('rec-phone').value = '';
+    loadRecipients();
+}
+
+async function removeRec(id) {
+    if (!confirm('Remove this recipient?')) return;
+    await fetch('/api/recipients/' + id, { method: 'DELETE' });
+    loadRecipients();
+}
+
+async function loadDigestPreview() {
+    const el = document.getElementById('digest-preview');
+    el.textContent = 'Loading...';
+    try {
+        const r = await fetch('/api/digest/preview');
+        const data = await r.json();
+        el.textContent = data.message;
+    } catch(e) { el.textContent = 'Error: ' + e; }
+}
+
+async function sendDigestNow() {
+    if (!confirm('Send morning digest to all recipients now?')) return;
+    const r = await fetch('/api/digest/send', { method: 'POST' });
+    const data = await r.json();
+    alert(`Sent to ${data.sent}/${data.total} recipients`);
+}
+
+async function sendTest() {
+    const el = document.getElementById('test-result');
+    el.innerHTML = '<span class="spinner"></span> Sending...';
+    try {
+        const r = await fetch('/api/whatsapp/test', { method: 'POST' });
+        const data = await r.json();
+        el.innerHTML = data.success
+            ? `<span style="color:var(--success)">✓ ${data.message}</span>`
+            : `<span style="color:var(--error)">✗ ${data.message}</span>`;
+    } catch(e) { el.innerHTML = `<span style="color:var(--error)">Error: ${e}</span>`; }
+}
+
+loadRecipients();
+loadDigestPreview();
+</script>
+</body>
+</html>

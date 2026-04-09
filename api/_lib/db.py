@@ -61,7 +61,9 @@ def get_camera(camera_id):
     return _parse_camera(data)
 
 
-def add_camera(name, snapshot_url, business_type, location="", whatsapp_alert=True):
+def add_camera(name, snapshot_url, business_type, location="", whatsapp_alert=True,
+               zone_type="general", hours_open="09:00", hours_close="22:00",
+               after_hours_mode="critical", timezone="Asia/Jakarta"):
     r = get_redis()
     if not r:
         return None
@@ -73,6 +75,11 @@ def add_camera(name, snapshot_url, business_type, location="", whatsapp_alert=Tr
         "location": location,
         "is_active": "1",
         "whatsapp_alert": "1" if whatsapp_alert else "0",
+        "zone_type": zone_type,
+        "hours_open": hours_open,
+        "hours_close": hours_close,
+        "after_hours_mode": after_hours_mode,
+        "timezone": timezone,
         "last_seen": "",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
@@ -102,6 +109,11 @@ def _parse_camera(data):
         "location": data.get("location", ""),
         "is_active": data.get("is_active", "1") == "1",
         "whatsapp_alert": data.get("whatsapp_alert", "1") == "1",
+        "zone_type": data.get("zone_type", "general"),
+        "hours_open": data.get("hours_open", "09:00"),
+        "hours_close": data.get("hours_close", "22:00"),
+        "after_hours_mode": data.get("after_hours_mode", "critical"),
+        "timezone": data.get("timezone", "Asia/Jakarta"),
         "last_seen": data.get("last_seen", ""),
         "created_at": data.get("created_at", ""),
     }
@@ -109,7 +121,7 @@ def _parse_camera(data):
 
 # --- Analyses ---
 
-def add_analysis(camera_id, result, image_url=""):
+def add_analysis(camera_id, result, image_url="", shift=""):
     r = get_redis()
     if not r:
         return None
@@ -124,6 +136,9 @@ def add_analysis(camera_id, result, image_url=""):
         "summary": result.get("summary", ""),
         "people_count": str(result.get("people_count", 0)),
         "image_url": image_url,
+        "shift": shift or _current_shift(),
+        "model_used": result.get("model_used", "gpt-4o-mini"),
+        "escalated": "1" if result.get("escalated") else "0",
         "analyzed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     r.hset(f"analysis:{analysis_id}", values=data)
@@ -133,6 +148,19 @@ def add_analysis(camera_id, result, image_url=""):
     r.ltrim(f"analyses:camera:{camera_id}", 0, 499)
     update_camera(camera_id, last_seen=data["analyzed_at"])
     return analysis_id
+
+
+def _current_shift():
+    """Determine current shift based on Jakarta time."""
+    from datetime import datetime, timezone, timedelta
+    jakarta = datetime.now(timezone.utc) + timedelta(hours=7)
+    h = jakarta.hour
+    if 6 <= h < 14:
+        return "pagi"
+    elif 14 <= h < 22:
+        return "sore"
+    else:
+        return "malam"
 
 
 def get_recent_analyses(camera_id=None, limit=50):
@@ -317,3 +345,225 @@ def get_dashboard_stats():
         "total_analyses": len(analysis_ids),
         "db_configured": True,
     }
+
+
+# --- Recipients (WhatsApp) ---
+
+def add_recipient(phone, name, role="manager", digest=True, alerts=True):
+    r = get_redis()
+    if not r:
+        return None
+    rid = str(uuid.uuid4())[:8]
+    r.hset(f"recipient:{rid}", values={
+        "phone": phone,
+        "name": name,
+        "role": role,
+        "digest": "1" if digest else "0",
+        "alerts": "1" if alerts else "0",
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+    r.sadd("recipients", rid)
+    return rid
+
+
+def get_recipients(digest_only=False, alerts_only=False):
+    r = get_redis()
+    if not r:
+        return []
+    ids = r.smembers("recipients")
+    out = []
+    for rid in ids:
+        d = r.hgetall(f"recipient:{rid}")
+        if not d:
+            continue
+        d["id"] = rid
+        d["digest"] = d.get("digest", "1") == "1"
+        d["alerts"] = d.get("alerts", "1") == "1"
+        if digest_only and not d["digest"]:
+            continue
+        if alerts_only and not d["alerts"]:
+            continue
+        out.append(d)
+    return out
+
+
+def delete_recipient(rid):
+    r = get_redis()
+    if not r:
+        return
+    r.delete(f"recipient:{rid}")
+    r.srem("recipients", rid)
+
+
+# --- Daily digest stats ---
+
+def get_yesterday_stats():
+    """Aggregate yesterday's analyses for daily digest."""
+    from datetime import datetime, timezone, timedelta
+    r = get_redis()
+    if not r:
+        return None
+
+    jakarta = datetime.now(timezone.utc) + timedelta(hours=7)
+    yesterday = jakarta - timedelta(days=1)
+    y_start = yesterday.replace(hour=0, minute=0, second=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    y_end = yesterday.replace(hour=23, minute=59, second=59).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Note: stored timestamps are UTC, so adjust window
+    # Simpler: just look at last 24 hours of data
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    analysis_ids = r.lrange("analyses:all", 0, 499)
+    by_shift = {"pagi": [], "sore": [], "malam": []}
+    by_camera = {}
+    total = 0
+    critical_alerts = 0
+    high_alerts = 0
+    service_scores = []
+    theft_scores = []
+
+    for aid in analysis_ids:
+        d = r.hgetall(f"analysis:{aid}")
+        if not d:
+            continue
+        if d.get("analyzed_at", "") < cutoff:
+            continue
+        total += 1
+        try:
+            svc = float(d.get("customer_service_score", 0))
+            theft = float(d.get("theft_risk_score", 0))
+            service_scores.append(svc)
+            theft_scores.append(theft)
+            shift = d.get("shift", "")
+            if shift in by_shift:
+                by_shift[shift].append(svc)
+            cam_id = d.get("camera_id", "")
+            if cam_id not in by_camera:
+                by_camera[cam_id] = []
+            by_camera[cam_id].append(svc)
+            level = d.get("alert_level", "")
+            if level == "critical":
+                critical_alerts += 1
+            elif level == "high":
+                high_alerts += 1
+        except (ValueError, TypeError):
+            pass
+
+    # Per-shift averages
+    shift_avgs = {}
+    for s, scores in by_shift.items():
+        if scores:
+            shift_avgs[s] = round(sum(scores) / len(scores), 1)
+
+    # Best/worst shift
+    best_shift = max(shift_avgs.items(), key=lambda x: x[1])[0] if shift_avgs else None
+    worst_shift = min(shift_avgs.items(), key=lambda x: x[1])[0] if shift_avgs else None
+
+    # Per-camera averages
+    camera_avgs = []
+    for cam_id, scores in by_camera.items():
+        cam = get_camera(cam_id)
+        if cam and scores:
+            camera_avgs.append({
+                "name": cam["name"],
+                "avg_service": round(sum(scores) / len(scores), 1),
+                "samples": len(scores),
+            })
+    camera_avgs.sort(key=lambda x: x["avg_service"], reverse=True)
+
+    return {
+        "date": yesterday.strftime("%Y-%m-%d"),
+        "total_analyses": total,
+        "critical_alerts": critical_alerts,
+        "high_alerts": high_alerts,
+        "avg_service": round(sum(service_scores) / len(service_scores), 1) if service_scores else 0,
+        "avg_theft_risk": round(sum(theft_scores) / len(theft_scores), 1) if theft_scores else 0,
+        "shift_avgs": shift_avgs,
+        "best_shift": best_shift,
+        "worst_shift": worst_shift,
+        "best_camera": camera_avgs[0] if camera_avgs else None,
+        "worst_camera": camera_avgs[-1] if len(camera_avgs) > 1 else None,
+    }
+
+
+# --- Shift leaderboard ---
+
+def get_shift_leaderboard(days=7):
+    """Compute shift performance over the last N days."""
+    from datetime import datetime, timezone, timedelta
+    r = get_redis()
+    if not r:
+        return {}
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    analysis_ids = r.lrange("analyses:all", 0, 999)
+    by_shift = {"pagi": {"service": [], "theft": [], "alerts": 0, "samples": 0},
+                "sore": {"service": [], "theft": [], "alerts": 0, "samples": 0},
+                "malam": {"service": [], "theft": [], "alerts": 0, "samples": 0}}
+
+    for aid in analysis_ids:
+        d = r.hgetall(f"analysis:{aid}")
+        if not d or d.get("analyzed_at", "") < cutoff:
+            continue
+        shift = d.get("shift", "")
+        if shift not in by_shift:
+            continue
+        try:
+            by_shift[shift]["service"].append(float(d.get("customer_service_score", 0)))
+            by_shift[shift]["theft"].append(float(d.get("theft_risk_score", 0)))
+            by_shift[shift]["samples"] += 1
+            if d.get("alert_level") in ("high", "critical"):
+                by_shift[shift]["alerts"] += 1
+        except (ValueError, TypeError):
+            pass
+
+    out = {}
+    for s, data in by_shift.items():
+        if data["samples"] > 0:
+            out[s] = {
+                "avg_service": round(sum(data["service"]) / len(data["service"]), 1),
+                "avg_theft": round(sum(data["theft"]) / len(data["theft"]), 1),
+                "alerts": data["alerts"],
+                "samples": data["samples"],
+            }
+    return out
+
+
+# --- Alert feedback ---
+
+def update_alert_feedback(alert_id, feedback):
+    """Mark alert with user feedback (false_positive, confirmed, investigating)."""
+    r = get_redis()
+    if not r:
+        return False
+    if not r.hgetall(f"alert:{alert_id}"):
+        return False
+    r.hset(f"alert:{alert_id}", values={
+        "feedback": feedback,
+        "feedback_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "is_read": "1",
+    })
+    return True
+
+
+def get_camera_false_positive_rate(camera_id, days=30):
+    """Compute false positive rate for a camera over the last N days."""
+    from datetime import datetime, timezone, timedelta
+    r = get_redis()
+    if not r:
+        return None
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ids = r.lrange(f"alerts:camera:{camera_id}", 0, 199)
+    total = 0
+    false_positives = 0
+    for aid in ids:
+        d = r.hgetall(f"alert:{aid}")
+        if not d or d.get("created_at", "") < cutoff:
+            continue
+        if not d.get("feedback"):
+            continue  # only count alerts with feedback
+        total += 1
+        if d.get("feedback") == "false_positive":
+            false_positives += 1
+    if total == 0:
+        return None
+    return round(false_positives / total * 100, 1)

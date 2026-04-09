@@ -20,6 +20,7 @@
             <a href="/cameras" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Cameras</a>
             <a href="/alerts" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerts <span class="nav-badge" id="alert-badge" style="display:none">0</span></a>
             <a href="/reports" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg> Reports</a>
+            <a href="/settings" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</a>
         </nav>
         <div class="sidebar-footer"><div class="wa-status"><span class="wa-dot off" id="wa-dot"></span><span id="wa-label">WA: Checking...</span></div></div>
     </aside>
@@ -42,6 +43,18 @@
                 <option value="wholesale">Wholesale</option>
                 <option value="restaurant">Restaurant</option>
             </select>
+        </div>
+
+        <!-- Shift Leaderboard -->
+        <div class="card" style="margin-bottom:24px">
+            <div class="card-header">
+                <span class="card-title">Shift Performance (last 7 days)</span>
+            </div>
+            <div class="card-body">
+                <div id="shift-board" class="grid-3">
+                    <div class="empty" style="grid-column:1/-1"><h3>No shift data yet</h3><p>Run analyses to see shift performance</p></div>
+                </div>
+            </div>
         </div>
 
         <!-- Charts -->
@@ -153,8 +166,48 @@ function renderTable(data) {
     `).join('');
 }
 
+async function loadShifts() {
+    const r = await fetch('/api/analytics/shifts?days=7');
+    const data = await r.json();
+    const el = document.getElementById('shift-board');
+    if (Object.keys(data).length === 0) {
+        el.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>No shift data yet</h3><p>Run analyses to see shift performance</p></div>';
+        return;
+    }
+    const shiftNames = { pagi: 'Shift Pagi (06–14)', sore: 'Shift Sore (14–22)', malam: 'Shift Malam (22–06)' };
+    const shiftEmojis = { pagi: '☀️', sore: '🌇', malam: '🌙' };
+    const order = ['pagi', 'sore', 'malam'];
+    el.innerHTML = order.filter(s => data[s]).map(s => {
+        const d = data[s];
+        return `
+        <div class="card" style="border:1px solid var(--border)">
+            <div class="card-body">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                    <span style="font-size:24px">${shiftEmojis[s]}</span>
+                    <div>
+                        <div style="font-weight:700;color:var(--text-heading)">${shiftNames[s]}</div>
+                        <div style="font-size:11px;color:var(--text-dim)">${d.samples} analyses</div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div>
+                        <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em">Service</div>
+                        <div class="score ${scoreClass(d.avg_service)}" style="font-size:24px">${d.avg_service}/10</div>
+                    </div>
+                    <div>
+                        <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em">Risk</div>
+                        <div class="score ${scoreClass(d.avg_theft, true)}" style="font-size:24px">${d.avg_theft}/10</div>
+                    </div>
+                </div>
+                <div style="margin-top:12px;font-size:12px;color:var(--text-muted)">${d.alerts} alerts</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
 loadCamOpts();
 loadAll();
+loadShifts();
 </script>
 </body>
 </html>

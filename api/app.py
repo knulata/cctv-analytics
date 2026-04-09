@@ -29,32 +29,38 @@ def add_camera():
     business_type = data.get("business_type", "retail")
     location = data.get("location", "").strip()
     wa_alert = data.get("whatsapp_alert", True)
+    zone_type = data.get("zone_type", "general")
+    hours_open = data.get("hours_open", "09:00")
+    hours_close = data.get("hours_close", "22:00")
+    after_hours_mode = data.get("after_hours_mode", "critical")
 
     if not name:
         return jsonify({"error": "Camera name is required"}), 400
     if business_type not in ("retail", "wholesale", "restaurant"):
         return jsonify({"error": "Invalid business type"}), 400
 
-    # Test snapshot URL if provided
     if snapshot_url:
         b64, err = analyzer.fetch_snapshot(snapshot_url)
         if err:
             return jsonify({"error": f"Cannot fetch snapshot: {err}", "connectable": False}), 400
 
-    cid = db.add_camera(name, snapshot_url, business_type, location, wa_alert)
+    cid = db.add_camera(
+        name, snapshot_url, business_type, location, wa_alert,
+        zone_type=zone_type, hours_open=hours_open, hours_close=hours_close,
+        after_hours_mode=after_hours_mode,
+    )
     return jsonify({"id": cid, "message": "Camera added"}), 201
 
 
 @app.route("/api/cameras/<camera_id>", methods=["PUT"])
 def update_camera(camera_id):
     data = request.json or {}
-    allowed = {"name", "snapshot_url", "business_type", "location", "is_active", "whatsapp_alert"}
+    allowed = {"name", "snapshot_url", "business_type", "location", "is_active",
+               "whatsapp_alert", "zone_type", "hours_open", "hours_close", "after_hours_mode"}
     updates = {}
     for k, v in data.items():
         if k in allowed:
-            if k == "is_active":
-                updates[k] = "1" if v else "0"
-            elif k == "whatsapp_alert":
+            if k in ("is_active", "whatsapp_alert"):
                 updates[k] = "1" if v else "0"
             else:
                 updates[k] = str(v)
@@ -143,15 +149,20 @@ def analyze_camera(camera_id):
     if not b64:
         return jsonify({"error": f"Cannot fetch snapshot: {err}"}), 502
 
-    # Skip if scene unchanged (unless forced)
     if not force and not analyzer.has_scene_changed_redis(camera_id, b64):
-        return jsonify({"skipped": True, "reason": "Scene unchanged — no new analysis needed"})
+        return jsonify({"skipped": True, "reason": "Scene unchanged"})
 
-    result = analyzer.analyze_image_base64(b64, cam["business_type"])
+    after_hours = not analyzer.is_in_business_hours(cam)
+    result = analyzer.analyze_image_base64(
+        b64, cam["business_type"],
+        zone_type=cam.get("zone_type", "general"),
+        after_hours=after_hours,
+    )
     analysis_id = db.add_analysis(camera_id, result, cam["snapshot_url"])
-    _create_alerts(result, analysis_id, camera_id, cam["snapshot_url"])
+    _create_alerts(result, analysis_id, camera_id, cam["snapshot_url"], after_hours=after_hours)
 
     result["analysis_id"] = analysis_id
+    result["after_hours"] = after_hours
     return jsonify(result)
 
 
@@ -159,29 +170,46 @@ def analyze_camera(camera_id):
 
 @app.route("/api/cron/analyze", methods=["GET"])
 def cron_analyze():
-    """Called by Vercel cron to analyze all active cameras.
-    Uses motion detection to skip unchanged scenes (saves ~80% API cost)."""
+    """Vercel cron: analyze all active cameras with smart skipping.
+
+    Skips cameras when:
+    - Outside business hours AND after_hours_mode is 'off'
+    - Scene unchanged (motion detection)
+
+    After-hours mode is stricter: any motion = critical alert.
+    """
     cameras = db.get_cameras(active_only=True)
     results = []
-    skipped = 0
+    skipped_unchanged = 0
+    skipped_closed = 0
     for cam in cameras:
         if not cam["snapshot_url"]:
             continue
         try:
+            after_hours = not analyzer.is_in_business_hours(cam)
+            mode = cam.get("after_hours_mode", "critical")
+            if after_hours and mode == "off":
+                skipped_closed += 1
+                results.append({"camera": cam["name"], "skipped": True, "reason": "closed"})
+                continue
+
             b64, err = analyzer.fetch_snapshot(cam["snapshot_url"])
             if not b64:
                 results.append({"camera": cam["name"], "error": err})
                 continue
 
-            # Motion detection: skip if scene hasn't changed
             if not analyzer.has_scene_changed_redis(cam["id"], b64):
-                skipped += 1
+                skipped_unchanged += 1
                 results.append({"camera": cam["name"], "skipped": True, "reason": "no_change"})
                 continue
 
-            result = analyzer.analyze_image_base64(b64, cam["business_type"])
+            result = analyzer.analyze_image_base64(
+                b64, cam["business_type"],
+                zone_type=cam.get("zone_type", "general"),
+                after_hours=after_hours,
+            )
             analysis_id = db.add_analysis(cam["id"], result, cam["snapshot_url"])
-            alerts = _create_alerts(result, analysis_id, cam["id"], cam["snapshot_url"])
+            alerts = _create_alerts(result, analysis_id, cam["id"], cam["snapshot_url"], after_hours=after_hours)
             results.append({
                 "camera": cam["name"],
                 "service_score": result.get("customer_service_score"),
@@ -189,15 +217,24 @@ def cron_analyze():
                 "alerts_created": len(alerts),
                 "model": result.get("model_used", "unknown"),
                 "escalated": result.get("escalated", False),
+                "after_hours": after_hours,
             })
         except Exception as e:
             results.append({"camera": cam["name"], "error": str(e)})
     return jsonify({
-        "analyzed": len(results) - skipped,
-        "skipped": skipped,
+        "analyzed": len(results) - skipped_unchanged - skipped_closed,
+        "skipped_unchanged": skipped_unchanged,
+        "skipped_closed": skipped_closed,
         "total_cameras": len(results),
         "results": results,
     })
+
+
+@app.route("/api/cron/digest", methods=["GET"])
+def cron_digest():
+    """Vercel cron: send daily morning digest at 8am Jakarta."""
+    result = whatsapp.send_digest()
+    return jsonify(result)
 
 
 # ─── Alerts ─────────────────────────────────────────────────
@@ -295,23 +332,140 @@ def whatsapp_test():
     return jsonify({"success": ok, "message": msg})
 
 
+# ─── Recipients (WhatsApp targets) ─────────────────────────
+
+@app.route("/api/recipients", methods=["GET"])
+def list_recipients():
+    return jsonify(db.get_recipients())
+
+
+@app.route("/api/recipients", methods=["POST"])
+def add_recipient():
+    data = request.json or {}
+    phone = data.get("phone", "").strip()
+    name = data.get("name", "").strip()
+    role = data.get("role", "manager")
+    digest = data.get("digest", True)
+    alerts = data.get("alerts", True)
+    if not phone or not name:
+        return jsonify({"error": "Phone and name required"}), 400
+    rid = db.add_recipient(phone, name, role, digest, alerts)
+    return jsonify({"id": rid, "message": "Recipient added"}), 201
+
+
+@app.route("/api/recipients/<rid>", methods=["DELETE"])
+def delete_recipient(rid):
+    db.delete_recipient(rid)
+    return jsonify({"message": "Removed"})
+
+
+# ─── Shifts (leaderboard) ──────────────────────────────────
+
+@app.route("/api/analytics/shifts", methods=["GET"])
+def shift_leaderboard():
+    days = request.args.get("days", 7, type=int)
+    return jsonify(db.get_shift_leaderboard(days))
+
+
+# ─── Digest (preview & manual send) ────────────────────────
+
+@app.route("/api/digest/preview", methods=["GET"])
+def digest_preview():
+    from _lib import digest as digest_mod
+    stats = db.get_yesterday_stats()
+    base_url = os.environ.get("BASE_URL", "")
+    text = digest_mod.compose_digest(stats, base_url)
+    return jsonify({"stats": stats, "message": text})
+
+
+@app.route("/api/digest/send", methods=["POST"])
+def digest_send():
+    return jsonify(whatsapp.send_digest())
+
+
+# ─── Alert feedback (manual + WhatsApp webhook) ────────────
+
+@app.route("/api/alerts/<alert_id>/feedback", methods=["PUT"])
+def alert_feedback(alert_id):
+    data = request.json or {}
+    feedback = data.get("feedback", "").strip().lower()
+    if feedback not in ("false_positive", "confirmed", "investigating"):
+        return jsonify({"error": "Invalid feedback type"}), 400
+    if not db.update_alert_feedback(alert_id, feedback):
+        return jsonify({"error": "Alert not found"}), 404
+    return jsonify({"message": "Feedback recorded"})
+
+
+@app.route("/api/whatsapp/webhook", methods=["POST"])
+def whatsapp_webhook():
+    """Receive incoming WhatsApp messages from Fonnte and parse feedback.
+
+    Fonnte webhook posts JSON like:
+    {"device": "...", "sender": "62...", "message": "FALSE", "member": null, ...}
+    """
+    data = request.json or request.form.to_dict()
+    sender = data.get("sender", "")
+    message = data.get("message", "")
+    feedback = whatsapp.parse_feedback_reply(message)
+
+    if not feedback:
+        return jsonify({"ok": True, "action": "ignored", "reason": "no feedback intent"})
+
+    # Find the most recent unread alert for this sender's recipient
+    # In production, you'd map sender phone to recipient and find their pending alerts
+    recent_alerts = db.get_alerts(unread_only=True, limit=10)
+    if not recent_alerts:
+        return jsonify({"ok": True, "action": "no_pending_alerts"})
+
+    # Mark the most recent unread alert with this feedback
+    target = recent_alerts[0]
+    db.update_alert_feedback(target["id"], feedback)
+
+    return jsonify({
+        "ok": True,
+        "action": "feedback_recorded",
+        "alert_id": target["id"],
+        "feedback": feedback,
+        "sender": sender,
+    })
+
+
 # ─── Cron router (handles ?cron= from vercel.json rewrite) ─
 
 @app.before_request
 def handle_cron_param():
-    if request.args.get("cron") == "analyze" and request.path in ("/api/index", "/api/app"):
-        return cron_analyze()
+    if request.path in ("/api/index", "/api/app"):
+        c = request.args.get("cron")
+        if c == "analyze":
+            return cron_analyze()
+        if c == "digest":
+            return cron_digest()
 
 
 # ─── Helpers ────────────────────────────────────────────────
 
-def _create_alerts(result, analysis_id, camera_id, image_url=""):
+def _create_alerts(result, analysis_id, camera_id, image_url="", after_hours=False):
     """Create alerts from analysis results and send WhatsApp notifications."""
     alerts = []
     theft_score = result.get("theft_risk_score", 0)
     alert_level = result.get("alert_level", "none")
     service_score = result.get("customer_service_score", 5)
     fraud_indicators = result.get("fraud_indicators", [])
+    people_count = result.get("people_count", 0)
+
+    # AFTER HOURS: any people = critical alert
+    if after_hours and people_count > 0:
+        if not db.is_duplicate_alert(camera_id, "theft"):
+            aid = db.add_alert(
+                analysis_id, camera_id, "critical", "theft",
+                f"⚠️ AFTER-HOURS: {people_count} person(s) detected",
+                result.get("summary", "Motion detected outside business hours"), image_url,
+            )
+            alerts.append(aid)
+            _notify_whatsapp(camera_id, "critical", "theft",
+                           f"AFTER-HOURS: {people_count} person(s) detected",
+                           result.get("summary", ""), image_url, aid)
+        return alerts
 
     # Theft alert
     if theft_score >= 7 or alert_level == "critical":
@@ -325,7 +479,7 @@ def _create_alerts(result, analysis_id, camera_id, image_url=""):
             alerts.append(aid)
             _notify_whatsapp(camera_id, severity, "theft",
                            f"High theft risk (score: {theft_score}/10)",
-                           result.get("theft_description", ""), image_url)
+                           result.get("theft_description", ""), image_url, aid)
 
     elif theft_score >= 4 or alert_level == "high":
         if not db.is_duplicate_alert(camera_id, "theft"):
@@ -349,7 +503,7 @@ def _create_alerts(result, analysis_id, camera_id, image_url=""):
             if severity == "high":
                 _notify_whatsapp(camera_id, severity, "fraud",
                                f"{len(fraud_indicators)} fraud indicators",
-                               "; ".join(fraud_indicators), image_url)
+                               "; ".join(fraud_indicators), image_url, aid)
 
     # Poor service
     if service_score <= 3:
@@ -366,8 +520,8 @@ def _create_alerts(result, analysis_id, camera_id, image_url=""):
     return alerts
 
 
-def _notify_whatsapp(camera_id, severity, category, title, description, image_url):
+def _notify_whatsapp(camera_id, severity, category, title, description, image_url, alert_id=""):
     """Send WhatsApp notification if enabled for this camera."""
     cam = db.get_camera(camera_id)
     if cam and cam.get("whatsapp_alert"):
-        whatsapp.send_alert(cam["name"], severity, category, title, description, image_url)
+        whatsapp.send_alert(cam["name"], severity, category, title, description, image_url, alert_id)

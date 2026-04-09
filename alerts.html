@@ -19,6 +19,7 @@
             <a href="/cameras" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Cameras</a>
             <a href="/alerts" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Alerts <span class="nav-badge" id="alert-badge" style="display:none">0</span></a>
             <a href="/reports" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg> Reports</a>
+            <a href="/settings" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</a>
         </nav>
         <div class="sidebar-footer"><div class="wa-status"><span class="wa-dot off" id="wa-dot"></span><span id="wa-label">WA: Checking...</span></div></div>
     </aside>
@@ -77,6 +78,16 @@ async function markRead(id) {
     load();
 }
 
+async function setFeedback(id, feedback, e) {
+    e.stopPropagation();
+    await fetch(`/api/alerts/${id}/feedback`, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ feedback })
+    });
+    load();
+}
+
 async function load() {
     const p = new URLSearchParams();
     const sev = document.getElementById('f-sev').value;
@@ -105,7 +116,14 @@ async function load() {
                     <span>${a.camera_name}</span>
                     <span>${a.category}</span>
                     <span>${timeAgo(a.created_at)}</span>
+                    ${a.feedback ? `<span class="badge badge-${a.feedback === 'false_positive' ? 'low' : a.feedback === 'confirmed' ? 'medium' : 'high'}">${a.feedback.replace('_', ' ')}</span>` : ''}
                 </div>
+                ${!a.feedback ? `
+                <div style="display:flex;gap:6px;margin-top:8px">
+                    <button class="btn btn-success btn-sm" onclick="setFeedback('${a.id}','confirmed',event)">✓ Confirmed</button>
+                    <button class="btn btn-ghost btn-sm" onclick="setFeedback('${a.id}','investigating',event)">🔍 Investigating</button>
+                    <button class="btn btn-danger btn-sm" onclick="setFeedback('${a.id}','false_positive',event)">✗ False alarm</button>
+                </div>` : ''}
             </div>
         </div>
     `).join('') + '</div>';

@@ -5,6 +5,7 @@
     { "source": "/api/:path*", "destination": "/api/app" }
   ],
   "crons": [
-    { "path": "/api/app?cron=analyze", "schedule": "0 8 * * *" }
+    { "path": "/api/app?cron=analyze", "schedule": "0 8 * * *" },
+    { "path": "/api/app?cron=digest", "schedule": "0 1 * * *" }
   ]
 }
