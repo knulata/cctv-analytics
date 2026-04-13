@@ -4,6 +4,9 @@ import json
 import time
 import uuid
 
+# Namespace prefix for all Redis keys — prevents collision when sharing a DB
+PREFIX = "cctv:"
+
 _redis = None
 _redis_available = True
 
@@ -37,10 +40,10 @@ def get_cameras(active_only=False):
     r = get_redis()
     if not r:
         return []
-    keys = r.smembers("cameras")
+    keys = r.smembers(f"{PREFIX}cameras")
     cameras = []
     for key in keys:
-        data = r.hgetall(f"camera:{key}")
+        data = r.hgetall(f"{PREFIX}camera:{key}")
         if data:
             data["id"] = key
             if active_only and data.get("is_active") == "0":
@@ -54,7 +57,7 @@ def get_camera(camera_id):
     r = get_redis()
     if not r:
         return None
-    data = r.hgetall(f"camera:{camera_id}")
+    data = r.hgetall(f"{PREFIX}camera:{camera_id}")
     if not data:
         return None
     data["id"] = camera_id
@@ -83,8 +86,8 @@ def add_camera(name, snapshot_url, business_type, location="", whatsapp_alert=Tr
         "last_seen": "",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    r.hset(f"camera:{camera_id}", values=data)
-    r.sadd("cameras", camera_id)
+    r.hset(f"{PREFIX}camera:{camera_id}", values=data)
+    r.sadd(f"{PREFIX}cameras", camera_id)
     return camera_id
 
 
@@ -93,7 +96,7 @@ def update_camera(camera_id, **kwargs):
     if not r:
         return
     updates = {k: str(v) for k, v in kwargs.items()}
-    r.hset(f"camera:{camera_id}", values=updates)
+    r.hset(f"{PREFIX}camera:{camera_id}", values=updates)
 
 
 def deactivate_camera(camera_id):
@@ -141,11 +144,11 @@ def add_analysis(camera_id, result, image_url="", shift=""):
         "escalated": "1" if result.get("escalated") else "0",
         "analyzed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    r.hset(f"analysis:{analysis_id}", values=data)
-    r.lpush(f"analyses:camera:{camera_id}", analysis_id)
-    r.lpush("analyses:all", analysis_id)
-    r.ltrim("analyses:all", 0, 999)
-    r.ltrim(f"analyses:camera:{camera_id}", 0, 499)
+    r.hset(f"{PREFIX}analysis:{analysis_id}", values=data)
+    r.lpush(f"{PREFIX}analyses:camera:{camera_id}", analysis_id)
+    r.lpush(f"{PREFIX}analyses:all", analysis_id)
+    r.ltrim(f"{PREFIX}analyses:all", 0, 999)
+    r.ltrim(f"{PREFIX}analyses:camera:{camera_id}", 0, 499)
     update_camera(camera_id, last_seen=data["analyzed_at"])
     return analysis_id
 
@@ -168,13 +171,13 @@ def get_recent_analyses(camera_id=None, limit=50):
     if not r:
         return []
     if camera_id:
-        ids = r.lrange(f"analyses:camera:{camera_id}", 0, limit - 1)
+        ids = r.lrange(f"{PREFIX}analyses:camera:{camera_id}", 0, limit - 1)
     else:
-        ids = r.lrange("analyses:all", 0, limit - 1)
+        ids = r.lrange(f"{PREFIX}analyses:all", 0, limit - 1)
 
     analyses = []
     for aid in ids:
-        data = r.hgetall(f"analysis:{aid}")
+        data = r.hgetall(f"{PREFIX}analysis:{aid}")
         if data:
             data["id"] = aid
             cam = get_camera(data.get("camera_id", ""))
@@ -194,13 +197,13 @@ def get_score_trends(camera_id=None, business_type=None, limit=200):
     if not r:
         return []
     if camera_id:
-        ids = r.lrange(f"analyses:camera:{camera_id}", 0, limit - 1)
+        ids = r.lrange(f"{PREFIX}analyses:camera:{camera_id}", 0, limit - 1)
     else:
-        ids = r.lrange("analyses:all", 0, limit - 1)
+        ids = r.lrange(f"{PREFIX}analyses:all", 0, limit - 1)
 
     trends = []
     for aid in ids:
-        data = r.hgetall(f"analysis:{aid}")
+        data = r.hgetall(f"{PREFIX}analysis:{aid}")
         if not data:
             continue
         if business_type:
@@ -235,10 +238,10 @@ def add_alert(analysis_id, camera_id, severity, category, title, description="",
         "is_read": "0",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    r.hset(f"alert:{alert_id}", values=data)
-    r.lpush("alerts:all", alert_id)
-    r.lpush(f"alerts:camera:{camera_id}", alert_id)
-    r.ltrim("alerts:all", 0, 499)
+    r.hset(f"{PREFIX}alert:{alert_id}", values=data)
+    r.lpush(f"{PREFIX}alerts:all", alert_id)
+    r.lpush(f"{PREFIX}alerts:camera:{camera_id}", alert_id)
+    r.ltrim(f"{PREFIX}alerts:all", 0, 499)
     return alert_id
 
 
@@ -247,13 +250,13 @@ def get_alerts(severity=None, camera_id=None, category=None, unread_only=False, 
     if not r:
         return []
     if camera_id:
-        ids = r.lrange(f"alerts:camera:{camera_id}", 0, limit - 1)
+        ids = r.lrange(f"{PREFIX}alerts:camera:{camera_id}", 0, limit - 1)
     else:
-        ids = r.lrange("alerts:all", 0, limit - 1)
+        ids = r.lrange(f"{PREFIX}alerts:all", 0, limit - 1)
 
     alerts = []
     for aid in ids:
-        data = r.hgetall(f"alert:{aid}")
+        data = r.hgetall(f"{PREFIX}alert:{aid}")
         if not data:
             continue
         data["id"] = aid
@@ -277,17 +280,17 @@ def mark_alert_read(alert_id):
     r = get_redis()
     if not r:
         return
-    r.hset(f"alert:{alert_id}", "is_read", "1")
+    r.hset(f"{PREFIX}alert:{alert_id}", "is_read", "1")
 
 
 def is_duplicate_alert(camera_id, category, window_seconds=300):
     r = get_redis()
     if not r:
         return False
-    ids = r.lrange(f"alerts:camera:{camera_id}", 0, 9)
+    ids = r.lrange(f"{PREFIX}alerts:camera:{camera_id}", 0, 9)
     now = time.time()
     for aid in ids:
-        data = r.hgetall(f"alert:{aid}")
+        data = r.hgetall(f"{PREFIX}alert:{aid}")
         if data and data.get("category") == category:
             created = data.get("created_at", "")
             try:
@@ -314,21 +317,21 @@ def get_dashboard_stats():
     cameras = get_cameras(active_only=True)
     total_cameras = len(cameras)
 
-    alert_ids = r.lrange("alerts:all", 0, 99)
+    alert_ids = r.lrange(f"{PREFIX}alerts:all", 0, 99)
     unread = 0
     critical = 0
     for aid in alert_ids:
-        data = r.hgetall(f"alert:{aid}")
+        data = r.hgetall(f"{PREFIX}alert:{aid}")
         if data and data.get("is_read", "0") == "0":
             unread += 1
             if data.get("severity") == "critical":
                 critical += 1
 
-    analysis_ids = r.lrange("analyses:all", 0, 49)
+    analysis_ids = r.lrange(f"{PREFIX}analyses:all", 0, 49)
     service_scores = []
     theft_scores = []
     for aid in analysis_ids:
-        data = r.hgetall(f"analysis:{aid}")
+        data = r.hgetall(f"{PREFIX}analysis:{aid}")
         if data:
             try:
                 service_scores.append(float(data.get("customer_service_score", 0)))
@@ -354,7 +357,7 @@ def add_recipient(phone, name, role="manager", digest=True, alerts=True):
     if not r:
         return None
     rid = str(uuid.uuid4())[:8]
-    r.hset(f"recipient:{rid}", values={
+    r.hset(f"{PREFIX}recipient:{rid}", values={
         "phone": phone,
         "name": name,
         "role": role,
@@ -362,7 +365,7 @@ def add_recipient(phone, name, role="manager", digest=True, alerts=True):
         "alerts": "1" if alerts else "0",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
     })
-    r.sadd("recipients", rid)
+    r.sadd(f"{PREFIX}recipients", rid)
     return rid
 
 
@@ -370,10 +373,10 @@ def get_recipients(digest_only=False, alerts_only=False):
     r = get_redis()
     if not r:
         return []
-    ids = r.smembers("recipients")
+    ids = r.smembers(f"{PREFIX}recipients")
     out = []
     for rid in ids:
-        d = r.hgetall(f"recipient:{rid}")
+        d = r.hgetall(f"{PREFIX}recipient:{rid}")
         if not d:
             continue
         d["id"] = rid
@@ -391,8 +394,8 @@ def delete_recipient(rid):
     r = get_redis()
     if not r:
         return
-    r.delete(f"recipient:{rid}")
-    r.srem("recipients", rid)
+    r.delete(f"{PREFIX}recipient:{rid}")
+    r.srem(f"{PREFIX}recipients", rid)
 
 
 # --- Daily digest stats ---
@@ -412,7 +415,7 @@ def get_yesterday_stats():
     # Simpler: just look at last 24 hours of data
     cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    analysis_ids = r.lrange("analyses:all", 0, 499)
+    analysis_ids = r.lrange(f"{PREFIX}analyses:all", 0, 499)
     by_shift = {"pagi": [], "sore": [], "malam": []}
     by_camera = {}
     total = 0
@@ -422,7 +425,7 @@ def get_yesterday_stats():
     theft_scores = []
 
     for aid in analysis_ids:
-        d = r.hgetall(f"analysis:{aid}")
+        d = r.hgetall(f"{PREFIX}analysis:{aid}")
         if not d:
             continue
         if d.get("analyzed_at", "") < cutoff:
@@ -495,13 +498,13 @@ def get_shift_leaderboard(days=7):
         return {}
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    analysis_ids = r.lrange("analyses:all", 0, 999)
+    analysis_ids = r.lrange(f"{PREFIX}analyses:all", 0, 999)
     by_shift = {"pagi": {"service": [], "theft": [], "alerts": 0, "samples": 0},
                 "sore": {"service": [], "theft": [], "alerts": 0, "samples": 0},
                 "malam": {"service": [], "theft": [], "alerts": 0, "samples": 0}}
 
     for aid in analysis_ids:
-        d = r.hgetall(f"analysis:{aid}")
+        d = r.hgetall(f"{PREFIX}analysis:{aid}")
         if not d or d.get("analyzed_at", "") < cutoff:
             continue
         shift = d.get("shift", "")
@@ -535,9 +538,9 @@ def update_alert_feedback(alert_id, feedback):
     r = get_redis()
     if not r:
         return False
-    if not r.hgetall(f"alert:{alert_id}"):
+    if not r.hgetall(f"{PREFIX}alert:{alert_id}"):
         return False
-    r.hset(f"alert:{alert_id}", values={
+    r.hset(f"{PREFIX}alert:{alert_id}", values={
         "feedback": feedback,
         "feedback_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "is_read": "1",
@@ -552,11 +555,11 @@ def get_camera_false_positive_rate(camera_id, days=30):
     if not r:
         return None
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    ids = r.lrange(f"alerts:camera:{camera_id}", 0, 199)
+    ids = r.lrange(f"{PREFIX}alerts:camera:{camera_id}", 0, 199)
     total = 0
     false_positives = 0
     for aid in ids:
-        d = r.hgetall(f"alert:{aid}")
+        d = r.hgetall(f"{PREFIX}alert:{aid}")
         if not d or d.get("created_at", "") < cutoff:
             continue
         if not d.get("feedback"):

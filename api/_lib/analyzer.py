@@ -114,8 +114,9 @@ def has_scene_changed_redis(camera_id, b64_image):
     new_hash = compute_frame_hash(b64_image)
     r = db.get_redis()
     if r:
-        old_hash = r.get(f"framehash:{camera_id}")
-        r.set(f"framehash:{camera_id}", new_hash, ex=3600)  # expire after 1 hour
+        key = f"{db.PREFIX}framehash:{camera_id}"
+        old_hash = r.get(key)
+        r.set(key, new_hash, ex=3600)  # expire after 1 hour
     else:
         old_hash = _frame_hashes.get(camera_id)
         _frame_hashes[camera_id] = new_hash
